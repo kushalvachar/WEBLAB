@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Registration Page</title>
+
+  <!-- External style sheet -->
+  <link rel="stylesheet" type="text/css" href="3style.css">
+
+  <!-- Internal style sheet -->
+  <style>
+    label
+    {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    input
+    {
+      width: 95%;
+      padding: 6px;
+    }
+
+    button
+    {
+      margin-top: 15px;
+      padding: 8px 16px;
+    }
+    label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+}
+input {
+    width: 95%;
+    padding: 6px;
+}
+/* Style adjustments for the inline checkbox */
+.toggle-container {
+    display: flex;
+    align-items: center;
+    margin-top: 5px;
+}
+.toggle-container input {
+    width: auto;
+    margin-right: 8px;
+}
+.toggle-container label {
+    display: inline;
+    margin-top: 0;
+    font-weight: normal;
+    font-size: 14px;
+}
+button {
+    margin-top: 15px;
+    padding: 8px 16px;
+}
+  </style>
+</head>
+<body>
+  <div id="registrationBox">
+
+    <!-- Inline style sheet -->
+    <h2 style="text-align: center; color: darkblue;">Registration Form</h2>
+
+    <form onsubmit="return validateForm()">
+      <label>First Name</label>
+      <input type="text" id="firstName">
+
+      <label>Password</label>
+      <input type="password" id="password">
+      <div class="toggle-container">
+          <input type="checkbox" id="showPasswordToggle" onclick="togglePasswordVisibility()">
+          <label for="showPasswordToggle">Show Password</label>
+      </div>
+
+      <label>E-mail id</label>
+      <input type="text" id="emailId">
+
+      <label>Mobile Number</label>
+      <input type="text" id="mobileNumber">
+
+      <button type="submit">Register</button>
+      <div class="details" hidden="true">
+        <p class="name"></p>
+        <p class="email"></p>
+        <p class="phone"></p>
+      </div>
+
+    </form>
+  </div>
+
+  <script>
+    function togglePasswordVisibility() {
+      var passwordField = document.getElementById("password");
+      if (passwordField.type === "password") {
+        passwordField.type = "text";
+      }  else {
+        passwordField.type = "password";
+      }
+    }
+    var name,email,phone
+    function validateForm()
+    {
+      event.preventDefault(); 
+      var firstName = document.getElementById("firstName").value;
+      var password = document.getElementById("password").value;
+      var emailId = document.getElementById("emailId").value;
+      var mobileNumber = document.getElementById("mobileNumber").value;
+
+      // Patterns used for checking
+      var namePattern = /^[a-zA-Z]{6,}$/;
+      var passwordPattern = /^.{6,}$/;
+      var emailPattern = /^[a-zA-Z0-9._]+@[a-zA-Z0-9]+\.[a-zA-Z]{2,}$/;
+      var mobilePattern = /^[0-9]{10}$/;
+
+      // a) First name: only alphabets and at least 6 characters
+      if (namePattern.test(firstName) == false)
+      {
+        alert("First name must contain only alphabets and at least 6 characters");
+        return false;
+      }
+
+      // b) Password: at least 6 characters
+      if (passwordPattern.test(password) == false)
+      {
+        alert("Password must be at least 6 characters");
+        return false;
+      }
+
+      // c) E-mail: must follow name@domain.com
+      if (emailPattern.test(emailId) == false)
+      {
+        alert("Enter a valid e-mail id like name@domain.com");
+        return false;
+      }
+
+      // d) Mobile number: exactly 10 digits
+      if (mobilePattern.test(mobileNumber) == false)
+      {
+        alert("Mobile number must contain exactly 10 digits");
+        return false;
+      }
+      name=firstName
+      email=emailId
+      phone=mobileNumber
+      alert("Registration successful");
+      showdetails();
+      return true;
+    }
+    function showdetails(){
+      document.querySelector(".details").hidden=false;
+      document.querySelector(".name").innerText="Name: "+name;
+      document.querySelector(".email").innerText="Email: "+email;
+      document.querySelector(".phone").innerText="Phone number: "+phone;
+    }
+  </script>
+</body>
+</html>
