@@ -6,6 +6,9 @@
 <title>Viewer – 5th SEM WebLAB</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+
 <script src="config.js"></script>
 <style>
   :root{ --bg:#f8f9fa; --card:#fff; --text:#202124; --muted:#5f6368; --border:#dadce0; --accent:#1a73e8; --warn:#fef7e0; --warnText:#594300; }
@@ -137,66 +140,296 @@
   }
 
   // ---------- Run PHP through OnlineCompiler.io ----------
+  
+  // ---------- Run PHP through OnlineCompiler.io WebSocket ----------
+
   const CFG = window.LAB_CONFIG || {};
   const COMPILER = CFG.compiler || "php-8.5";
-  const API = "run.php";
 
-  function getKey(forcePrompt){
-    let k = CFG.apiKey || "";
-    if (!k) { try { k = localStorage.getItem("oc_key") || ""; } catch {} }
-    if (!k || forcePrompt) {
-      k = (prompt("Enter your OnlineCompiler.io API key (stored only in this browser):", k) || "").trim();
-      try { k ? localStorage.setItem("oc_key", k) : localStorage.removeItem("oc_key"); } catch {}
+  let compilerSocket = null;
+  let connectPromise = null;
+  let pendingRun = null;
+
+  // Get the public WebSocket widget key.
+  function getKey(forcePrompt) {
+    let key = CFG.widgetKey || "";
+
+    if (!key) {
+      try {
+        key = localStorage.getItem("oc_widget_key") || "";
+      } catch {}
     }
-    return k;
+
+    if (!key || forcePrompt) {
+      key = (prompt(
+        "Enter your OnlineCompiler.io WebSocket widget key:",
+        key
+      ) || "").trim();
+
+      try {
+        if (key) {
+          localStorage.setItem("oc_widget_key", key);
+        } else {
+          localStorage.removeItem("oc_widget_key");
+        }
+      } catch {}
+    }
+
+    return key;
   }
 
-  function msg(html, withKeyBtn){
-    out.innerHTML = '<div class="notice">' + html + (withKeyBtn ? '<br><button id="setKey">Enter API key</button>' : '') + '</div>';
+  // Display a notice in the Output panel.
+  function msg(html, withKeyBtn) {
+    out.innerHTML =
+      '<div class="notice">' +
+      html +
+      (withKeyBtn
+        ? '<br><button id="setKey">Enter WebSocket key</button>'
+        : '') +
+      '</div>';
+
     const b = document.getElementById("setKey");
-    if (b) b.onclick = () => runPhp(true);
-  }
 
-  async function runPhp(forcePrompt){
-    const key = getKey(forcePrompt);
-    if (!key) { msg("An <b>OnlineCompiler.io API key</b> is needed to run PHP output.", true); return; }
-    msg("Running <code>" + file + "</code> on OnlineCompiler.io…");
-    try {
-      const res = await fetch(API, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            compiler: COMPILER,
-            code: sourceText,
-            input: ""
-          })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || data.error || data.message || ("HTTP " + res.status));
-
-      out.innerHTML = "";
-      const wrap = document.createElement("div"); wrap.className = "wrap";
-      const meta = document.createElement("div"); meta.className = "meta";
-      meta.textContent = "Ran on OnlineCompiler.io · " + COMPILER + " · exit " + data.exit_code + (data.time ? " · " + data.time + "s" : "");
-      wrap.appendChild(meta);
-      if (data.error) {
-        const eb = document.createElement("pre"); eb.className = "errbox"; eb.textContent = data.error;
-        wrap.appendChild(eb);
-      }
-      const fr = document.createElement("iframe");
-      fr.setAttribute("sandbox", "allow-scripts");
-      fr.srcdoc = data.output || "<p style='font-family:sans-serif;color:#777'>(no output)</p>";
-      wrap.appendChild(fr);
-      out.appendChild(wrap);
-    } catch (e) {
-      msg("<b>Could not run the PHP file.</b><br>" + String(e.message).replace(/</g, "&lt;") +
-          "<br><br>If this says <code>Failed to fetch</code>, the API blocked the request from the browser (CORS) or the key is wrong. " +
-          "Check the key, then see the note about using a small proxy.", true);
+    if (b) {
+      b.onclick = () => runPhp(true);
     }
   }
+
+  // Disconnect and clear the existing connection.
+  function disconnectCompiler() {
+    if (compilerSocket) {
+      compilerSocket.disconnect();
+      compilerSocket = null;
+    }
+
+    connectPromise = null;
+  }
+
+  // Connect to OnlineCompiler.io.
+  function connectCompiler(key) {
+    if (compilerSocket?.connected) {
+      return Promise.resolve();
+    }
+
+    if (connectPromise) {
+      return connectPromise;
+    }
+
+    return connectPromise = new Promise((resolve, reject) => {
+
+      const socket = io("wss://api.onlinecompiler.io", {
+        auth: {
+          token: key
+        },
+        transports: ["websocket"],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        timeout: 15000
+      });
+
+      compilerSocket = socket;
+
+      socket.on("connect", () => {
+        connectPromise = null;
+        resolve();
+      });
+
+      socket.on("connect_error", (error) => {
+        connectPromise = null;
+        reject(error);
+      });
+
+      // Receive program execution results.
+      socket.on("codeoutput", (data) => {
+
+        if (!pendingRun) return;
+
+        const current = pendingRun;
+        pendingRun = null;
+
+        clearTimeout(current.timer);
+
+        current.resolve(data);
+      });
+
+      socket.on("disconnect", (reason) => {
+
+        if (pendingRun) {
+          const current = pendingRun;
+          pendingRun = null;
+
+          clearTimeout(current.timer);
+
+          current.reject(
+            new Error("WebSocket disconnected: " + reason)
+          );
+        }
+      });
+
+    });
+  }
+
+  // Execute code and wait for its WebSocket result.
+  function executeCode(code, compiler) {
+
+    return new Promise((resolve, reject) => {
+
+      if (!compilerSocket?.connected) {
+        reject(new Error("WebSocket is not connected."));
+        return;
+      }
+
+      if (pendingRun) {
+        reject(new Error("A program is already running."));
+        return;
+      }
+
+      pendingRun = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+
+          if (!pendingRun) return;
+
+          pendingRun = null;
+
+          reject(
+            new Error("Execution timed out. No result received within 60 seconds.")
+          );
+
+        }, 60000)
+      };
+
+      compilerSocket.emit("runcode", {
+        compiler: compiler,
+        code: code,
+        input: ""
+      });
+
+    });
+  }
+
+  // Display execution result in the Output panel.
+  function displayResult(data) {
+
+    if (data.error && data.code === "account_limit") {
+      msg(
+        "<b>Execution limit reached.</b><br>" +
+        "The OnlineCompiler.io account cannot run code right now. " +
+        "Please check your account usage and limits."
+      );
+      return;
+    }
+
+    if (data.error && data.exit_code === undefined) {
+      msg(
+        "<b>Execution failed.</b><br>" +
+        String(data.error).replace(/</g, "&lt;")
+      );
+      return;
+    }
+
+    out.innerHTML = "";
+
+    const wrap = document.createElement("div");
+    wrap.className = "wrap";
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+
+    meta.textContent =
+      "Ran on OnlineCompiler.io · " +
+      COMPILER +
+      " · exit " +
+      data.exit_code +
+      (data.time ? " · " + data.time + "s" : "");
+
+    wrap.appendChild(meta);
+
+    if (data.error) {
+      const eb = document.createElement("pre");
+      eb.className = "errbox";
+      eb.textContent = data.error;
+
+      wrap.appendChild(eb);
+    }
+
+    const fr = document.createElement("iframe");
+
+    fr.setAttribute("sandbox", "allow-scripts");
+
+    fr.srcdoc =
+      data.output ||
+      "<p style='font-family:sans-serif;color:#777'>" +
+      "(no output)</p>";
+
+    wrap.appendChild(fr);
+
+    out.appendChild(wrap);
+  }
+
+  // Main PHP execution function.
+  async function runPhp(forcePrompt) {
+
+    const key = getKey(forcePrompt);
+
+    if (!key) {
+      msg(
+        "An <b>OnlineCompiler.io WebSocket widget key</b> " +
+        "is required to run PHP.",
+        true
+      );
+      return;
+    }
+
+    const rerunBtn = document.getElementById("rerun");
+
+    rerunBtn.disabled = true;
+
+    msg("Connecting to OnlineCompiler.io WebSocket...");
+
+    try {
+
+      await connectCompiler(key);
+
+      msg("Running <code>" +
+        file +
+        "</code> on OnlineCompiler.io...");
+
+      const result = await executeCode(
+        sourceText,
+        COMPILER
+      );
+
+      displayResult(result);
+
+    } catch (error) {
+
+      msg(
+        "<b>Could not execute the PHP file.</b><br>" +
+        String(error.message).replace(/</g, "&lt;") +
+        "<br><br>Check your WebSocket key, domain restrictions, " +
+        "internet connection and OnlineCompiler.io account limits.",
+        true
+      );
+
+      // Allow a fresh connection attempt after a connection failure.
+      if (!compilerSocket?.connected) {
+        disconnectCompiler();
+      }
+
+    } finally {
+
+      rerunBtn.disabled = false;
+
+    }
+  }
+
+  // Re-run and key management buttons.
   document.getElementById("rerun").onclick = () => runPhp(false);
+
+  document.getElementById("keyBtn").textContent = "Widget key";
+
   document.getElementById("keyBtn").onclick = () => runPhp(true);
   load();
 </script>
