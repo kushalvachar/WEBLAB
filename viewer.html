@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viewer – 5th SEM WebLAB</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+  :root{ --bg:#f8f9fa; --card:#fff; --text:#202124; --muted:#5f6368; --border:#dadce0; --accent:#1a73e8; --warn:#fef7e0; --warnText:#594300; }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#202124; --card:#2d2e31; --text:#e8eaed; --muted:#9aa0a6; --border:#3c4043; --accent:#8ab4f8; --warn:#3b3520; --warnText:#f1dc9b; }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{display:flex;flex-direction:column;font-family:Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  header a.back{color:var(--accent);text-decoration:none;font-weight:500}
+  .title{flex:1;min-width:140px}
+  .title b{display:block;font-weight:500}
+  .title span{font-size:.8rem;color:var(--muted)}
+  .toggle{display:inline-flex;border:1px solid var(--border);border-radius:20px;overflow:hidden}
+  .toggle button{border:0;background:transparent;color:var(--text);padding:8px 20px;cursor:pointer;font-size:.9rem}
+  .toggle button.active{background:var(--accent);color:#fff}
+  .actions button,.actions a{border:1px solid var(--border);background:transparent;color:var(--text);padding:7px 12px;border-radius:16px;cursor:pointer;font-size:.8rem;text-decoration:none}
+  .actions button:hover,.actions a:hover{background:var(--bg)}
+  main{flex:1;position:relative;min-height:0}
+  .pane{position:absolute;inset:0;display:none;overflow:auto}
+  .pane.show{display:block}
+  iframe{width:100%;height:100%;border:0;background:#fff}
+  pre{margin:0;height:100%;overflow:auto;background:#0d1117}
+  pre code{display:block;padding:16px;font-size:.88rem;line-height:1.5;font-family:Consolas,Menlo,monospace;min-height:100%}
+  .notice{margin:24px auto;max-width:720px;padding:20px 24px;background:var(--warn);color:var(--warnText);border-radius:12px;line-height:1.6}
+  .notice code{background:rgba(0,0,0,.12);padding:2px 6px;border-radius:4px}
+  .notice button{margin-top:8px;padding:8px 16px;border-radius:16px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="index.html">← All files</a>
+  <div class="title"><b id="t">Loading…</b><span id="f"></span></div>
+  <div class="toggle">
+    <button id="bOut" class="active">Output</button>
+    <button id="bCode">Code</button>
+  </div>
+  <div class="actions">
+    <button id="copy">Copy code</button>
+    <a id="dl" download>Download</a>
+  </div>
+</header>
+
+<main>
+  <div class="pane show" id="out"></div>
+  <div class="pane" id="code"><pre><code id="src"></code></pre></div>
+</main>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const file = params.get("file");
+  const title = params.get("title") || file;
+  const ext = (file || "").split(".").pop().toLowerCase();
+  const out = document.getElementById("out");
+  const srcEl = document.getElementById("src");
+  let sourceText = "";
+
+  document.getElementById("t").textContent = title || "No file selected";
+  document.getElementById("f").textContent = file || "";
+  document.title = (title || "Viewer") + " – 5th SEM WebLAB";
+  if (file) document.getElementById("dl").href = file;
+
+  function show(which){
+    document.getElementById("bOut").classList.toggle("active", which === "out");
+    document.getElementById("bCode").classList.toggle("active", which === "code");
+    out.classList.toggle("show", which === "out");
+    document.getElementById("code").classList.toggle("show", which === "code");
+  }
+  document.getElementById("bOut").onclick = () => show("out");
+  document.getElementById("bCode").onclick = () => show("code");
+  document.getElementById("copy").onclick = async (e) => {
+    try { await navigator.clipboard.writeText(sourceText); e.target.textContent = "Copied!"; }
+    catch { e.target.textContent = "Copy failed"; }
+    setTimeout(() => e.target.textContent = "Copy code", 1500);
+  };
+
+  function notice(html){
+    out.innerHTML = '<div class="notice">' + html + '</div>';
+    out.querySelector("button")?.addEventListener("click", () => show("code"));
+  }
+
+  function showFrame(){
+    out.innerHTML = "";
+    const fr = document.createElement("iframe");
+    fr.src = file;
+    out.appendChild(fr);
+  }
+
+  async function load(){
+    if (!file) { notice("No file specified. <a href='index.html'>Go back</a>."); return; }
+
+    let text, contentType = "";
+    try {
+      const res = await fetch(file, { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      contentType = res.headers.get("content-type") || "";
+      text = await res.text();
+    } catch (err) {
+      srcEl.textContent = "Could not load " + file + "\n" + err.message;
+      notice("<b>Could not load <code>" + file + "</code>.</b><br>If you opened this page by double-clicking it (file://), " +
+             "Chrome blocks reading files. Run a local server from the repo folder, e.g. <code>php -S localhost:8000</code>, " +
+             "and open <code>http://localhost:8000</code>.");
+      return;
+    }
+
+    sourceText = text;
+    srcEl.textContent = text;
+    srcEl.className = "language-" + (ext === "php" ? "php" : ext === "xml" ? "xml" : "html");
+    hljs.highlightElement(srcEl);
+
+    if (ext === "php") {
+      // If the server executed the PHP, the response won't contain the raw "<?php" tag.
+      if (/<\?(php|=)/i.test(text)) {
+        notice("<b>PHP output isn't available on this server.</b><br>" +
+               "This host is serving <code>" + file + "</code> as plain text/download instead of running it, so only the source can be shown. " +
+               "To see the output, run the site on a PHP server, e.g. <code>php -S localhost:8000</code> in your repo folder " +
+               "(or XAMPP/WAMP), or host it on a PHP-capable host.<br><button>View code</button>");
+      } else {
+        showFrame();
+      }
+    } else {
+      showFrame();
+    }
+  }
+  load();
+</script>
+</body>
+</html>
