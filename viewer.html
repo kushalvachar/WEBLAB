@@ -6,6 +6,7 @@
 <title>Viewer – 5th SEM WebLAB</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="config.js"></script>
 <style>
   :root{ --bg:#f8f9fa; --card:#fff; --text:#202124; --muted:#5f6368; --border:#dadce0; --accent:#1a73e8; --warn:#fef7e0; --warnText:#594300; }
   @media (prefers-color-scheme: dark){
@@ -32,7 +33,10 @@
   pre code{display:block;padding:16px;font-size:.88rem;line-height:1.5;font-family:Consolas,Menlo,monospace;min-height:100%}
   .notice{margin:24px auto;max-width:720px;padding:20px 24px;background:var(--warn);color:var(--warnText);border-radius:12px;line-height:1.6}
   .notice code{background:rgba(0,0,0,.12);padding:2px 6px;border-radius:4px}
-  .notice button{margin-top:8px;padding:8px 16px;border-radius:16px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+  .wrap{display:flex;flex-direction:column;height:100%}
+  .meta{padding:6px 14px;font-size:.78rem;color:var(--muted);background:var(--card);border-bottom:1px solid var(--border)}
+  .errbox{margin:0;padding:10px 14px;background:var(--warn);color:var(--warnText);font:.82rem Consolas,monospace;white-space:pre-wrap;max-height:30%;overflow:auto}
+  .notice button{margin-right:8px;margin-top:8px;padding:8px 16px;border-radius:16px;border:0;background:var(--accent);color:#fff;cursor:pointer}
 </style>
 </head>
 <body>
@@ -44,6 +48,8 @@
     <button id="bCode">Code</button>
   </div>
   <div class="actions">
+    <button id="rerun" hidden>Re-run</button>
+    <button id="keyBtn" hidden>API key</button>
     <button id="copy">Copy code</button>
     <a id="dl" download>Download</a>
   </div>
@@ -117,12 +123,11 @@
     hljs.highlightElement(srcEl);
 
     if (ext === "php") {
-      // If the server executed the PHP, the response won't contain the raw "<?php" tag.
+      // If the host executed the PHP, the response won't contain the raw "<?php" tag.
       if (/<\?(php|=)/i.test(text)) {
-        notice("<b>PHP output isn't available on this server.</b><br>" +
-               "This host is serving <code>" + file + "</code> as plain text/download instead of running it, so only the source can be shown. " +
-               "To see the output, run the site on a PHP server, e.g. <code>php -S localhost:8000</code> in your repo folder " +
-               "(or XAMPP/WAMP), or host it on a PHP-capable host.<br><button>View code</button>");
+        document.getElementById("rerun").hidden = false;
+        document.getElementById("keyBtn").hidden = false;
+        runPhp(false);
       } else {
         showFrame();
       }
@@ -130,6 +135,63 @@
       showFrame();
     }
   }
+
+  // ---------- Run PHP through OnlineCompiler.io ----------
+  const CFG = window.LAB_CONFIG || {};
+  const COMPILER = CFG.compiler || "php-8.5";
+  const API = "https://api.onlinecompiler.io/api/run-code-sync/";
+
+  function getKey(forcePrompt){
+    let k = CFG.apiKey || "";
+    if (!k) { try { k = localStorage.getItem("oc_key") || ""; } catch {} }
+    if (!k || forcePrompt) {
+      k = (prompt("Enter your OnlineCompiler.io API key (stored only in this browser):", k) || "").trim();
+      try { k ? localStorage.setItem("oc_key", k) : localStorage.removeItem("oc_key"); } catch {}
+    }
+    return k;
+  }
+
+  function msg(html, withKeyBtn){
+    out.innerHTML = '<div class="notice">' + html + (withKeyBtn ? '<br><button id="setKey">Enter API key</button>' : '') + '</div>';
+    const b = document.getElementById("setKey");
+    if (b) b.onclick = () => runPhp(true);
+  }
+
+  async function runPhp(forcePrompt){
+    const key = getKey(forcePrompt);
+    if (!key) { msg("An <b>OnlineCompiler.io API key</b> is needed to run PHP output.", true); return; }
+    msg("Running <code>" + file + "</code> on OnlineCompiler.io…");
+    try {
+      const res = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": key },
+        body: JSON.stringify({ compiler: COMPILER, code: sourceText, input: "" })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || data.error || data.message || ("HTTP " + res.status));
+
+      out.innerHTML = "";
+      const wrap = document.createElement("div"); wrap.className = "wrap";
+      const meta = document.createElement("div"); meta.className = "meta";
+      meta.textContent = "Ran on OnlineCompiler.io · " + COMPILER + " · exit " + data.exit_code + (data.time ? " · " + data.time + "s" : "");
+      wrap.appendChild(meta);
+      if (data.error) {
+        const eb = document.createElement("pre"); eb.className = "errbox"; eb.textContent = data.error;
+        wrap.appendChild(eb);
+      }
+      const fr = document.createElement("iframe");
+      fr.setAttribute("sandbox", "allow-scripts");
+      fr.srcdoc = data.output || "<p style='font-family:sans-serif;color:#777'>(no output)</p>";
+      wrap.appendChild(fr);
+      out.appendChild(wrap);
+    } catch (e) {
+      msg("<b>Could not run the PHP file.</b><br>" + String(e.message).replace(/</g, "&lt;") +
+          "<br><br>If this says <code>Failed to fetch</code>, the API blocked the request from the browser (CORS) or the key is wrong. " +
+          "Check the key, then see the note about using a small proxy.", true);
+    }
+  }
+  document.getElementById("rerun").onclick = () => runPhp(false);
+  document.getElementById("keyBtn").onclick = () => runPhp(true);
   load();
 </script>
 </body>
