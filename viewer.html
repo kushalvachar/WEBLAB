@@ -139,7 +139,7 @@
   // ---------- Run PHP through OnlineCompiler.io ----------
   const CFG = window.LAB_CONFIG || {};
   const COMPILER = CFG.compiler || "php-8.5";
-  const API = "https://api.onlinecompiler.io/api/run-code-sync/";
+  const API = "run.php";
 
   function getKey(forcePrompt){
     let k = CFG.apiKey || "";
@@ -163,9 +163,15 @@
     msg("Running <code>" + file + "</code> on OnlineCompiler.io…");
     try {
       const res = await fetch(API, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": key },
-        body: JSON.stringify({ compiler: COMPILER, code: sourceText, input: "" })
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            compiler: COMPILER,
+            code: sourceText,
+            input: ""
+          })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || data.error || data.message || ("HTTP " + res.status));
