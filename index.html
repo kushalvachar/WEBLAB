@@ -1,47 +1,89 @@
-<html>
-  <head>
-    <title>5th SEM WebLAB</title>
-  </head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5th SEM WebLAB</title>
+<style>
+  :root{
+    --bg:#f8f9fa; --card:#fff; --text:#202124; --muted:#5f6368; --border:#dadce0; --hover:#e8f0fe; --accent:#1a73e8;
+    --html:#e8710a; --php:#7a86b8; --xml:#188038; --profile:#a142f4;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#202124; --card:#2d2e31; --text:#e8eaed; --muted:#9aa0a6; --border:#3c4043; --hover:#394457; --accent:#8ab4f8; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Google Sans",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{padding:32px 24px 8px;text-align:center}
+  header h1{margin:0;font-size:1.8rem;font-weight:500}
+  header p{margin:6px 0 0;color:var(--muted)}
+  .bar{max-width:1000px;margin:20px auto 0;padding:0 24px}
+  .bar input{width:100%;padding:12px 18px;border-radius:24px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:1rem;outline:none}
+  .bar input:focus{border-color:var(--accent)}
+  main{max-width:1000px;margin:0 auto;padding:24px}
+  h2.section{font-size:.9rem;font-weight:500;color:var(--muted);margin:24px 0 12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+  .tile{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;text-decoration:none;color:inherit;transition:background .15s,box-shadow .15s}
+  .tile:hover{background:var(--hover);box-shadow:0 1px 4px rgba(0,0,0,.2)}
+  .thumb{height:110px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:1.6rem;font-weight:700;color:#fff;letter-spacing:1px}
+  .html .thumb{background:var(--html)} .php .thumb{background:var(--php)} .xml .thumb{background:var(--xml)} .profile .thumb{background:var(--profile)}
+  .info{padding:12px 14px;border-top:1px solid var(--border)}
+  .info b{display:block;font-weight:500;font-size:.95rem}
+  .info span{font-size:.8rem;color:var(--muted)}
+  .empty{display:none;text-align:center;color:var(--muted);padding:40px}
+</style>
+</head>
+<body>
+<header>
+  <h1>5th SEM WebLAB code files</h1>
+  <p>Click a tile to view its output and source code</p>
+</header>
+<div class="bar"><input id="q" type="search" placeholder="Search labs..."></div>
+<main>
+  <h2 class="section">Profile</h2>
+  <div class="grid" id="g0"></div>
+  <h2 class="section">Lab programs</h2>
+  <div class="grid" id="g1"></div>
+  <div class="empty" id="empty">No matching files</div>
+</main>
 
-  <body style="margin: 50px;">
-    <h1 style="text-align:center;">
-      5th SEM WebLAB code files
-    </h1>
-    
-    <div style="text-align: center; margin-bottom: 20px;">
-      <a href="profile.html">
-        <h2>Profile</h2>
-      </a>
-    </div>
-    
-    <div style="display: grid; justify-content: center; align-items: center; grid-auto-flow: column; gap: 20px;">
-      <a href="lab1.html">
-        <h2>Lab1</h2>
-      </a>
+<script>
+  // Add or edit labs here: [title, file, kind]
+  const profile = [["Profile","profile.html","html"]];
+  const labs = [
+    ["Lab 1","lab1.html","html"],
+    ["Lab 2","lab2.html","html"],
+    ["Lab 3","lab3.html","html"],
+    ["Lab 4","lab4.xml","xml"],
+    ["Lab 5","lab5.php","php"],
+    ["Lab 6 – Part a","6a.php","php"],
+    ["Lab 6 – Part b, c, d","6bcd.php","php"],
+    ["Lab 7","7.php","php"]
+  ];
+  const label = {html:"HTML",php:"PHP",xml:"XML"};
 
-      <a href="lab2.html">
-        <h2>Lab2</h2>
-      </a>
-
-      <a href="lab3.html">
-        <h2>Lab3</h2>
-      </a>
-
-      <a href="lab4.xml">
-        <h2>Lab4</h2>
-      </a>
-      <a href="lab5.php">
-        <h2>Lab5</h2>
-      </a>
-      <a href="6a.php">
-        <h2>Lab6 - Part a</h2>
-      </a>
-      <a href="6bcd.php">
-        <h2>Lab6 - Part b,c,d</h2>
-      </a>
-      <a href="7.php">
-        <h2>Lab7</h2>
-      </a>
-    </div>
-  </body>
+  function render(){
+    const q = document.getElementById("q").value.toLowerCase();
+    let shown = 0;
+    [[profile,"g0"],[labs,"g1"]].forEach(([list,id])=>{
+      const el = document.getElementById(id);
+      el.innerHTML = "";
+      list.filter(([t,f])=>(t+f).toLowerCase().includes(q)).forEach(([t,f,k])=>{
+        shown++;
+        const a = document.createElement("a");
+        a.className = "tile " + (t==="Profile" ? "profile" : k);
+        a.href = "viewer.html?file=" + encodeURIComponent(f) + "&title=" + encodeURIComponent(t);
+        a.innerHTML = '<div class="thumb">' + (t==="Profile" ? "👤" : "&lt;" + label[k] + "&gt;") + '</div>' +
+                      '<div class="info"><b></b><span></span></div>';
+        a.querySelector("b").textContent = t;
+        a.querySelector("span").textContent = f;
+        el.appendChild(a);
+      });
+    });
+    document.getElementById("empty").style.display = shown ? "none" : "block";
+  }
+  document.getElementById("q").addEventListener("input", render);
+  render();
+</script>
+</body>
 </html>
